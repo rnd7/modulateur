@@ -1,0 +1,170 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+  <title>Modulateur</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/97/three.min.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" type="text/css" href="main.css">
+</head>
+<body>
+  <div class="display"></div>
+  <script id="vertexShader" type="x-shader/x-vertex">
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+      gl_Position = projectionMatrix * mvPosition;
+    }
+  </script>
+  <script id="fragmentShader" type="x-shader/x-fragment">
+			uniform float time;
+      uniform vec2 resolution;
+      uniform sampler2D texture;
+			varying vec2 vUv;
+			void main( void ) {
+				vec2 position = vUv;
+        vec2 center = vec2(position.x*2.-1., position.y*2.-1.);
+        vec4 textureColor = texture2D(texture, position);
+				float color = 0.0;
+				color += sin( center.x * cos( time / 17.0 ) * 177.0 ) + cos( center.y * cos( time / 17.3 ) * 1.0 );
+				color += cos( center.y * sin( time / 19.0 ) * 53.0 ) + cos( center.x * sin( time / 2.1 ) * 3.0 );
+				color += sin( center.x * cos( time / 3.7 ) * 113.0 ) + sin( center.y * sin( time / 117.0 ) * 7.0 );
+				color *= cos( time / 11.4 ) * 0.5;
+        float brightness = cos( color + time / 2.0 )/6.;
+				gl_FragColor =  vec4((textureColor.rgb + vec3(brightness, brightness, sin( color + time / 3.0 )))/2.0, 1.0 );
+
+			}
+  </script>
+
+  <script>
+    function makeUniforms() {
+      return {
+        "time": { value: 1.0 },
+        "resolution": { type: "v2", value: new THREE.Vector2() },
+        "texture": { type:'t', value: null },
+      }
+    }
+
+    function makeEmptyTexture(width, height, color) {
+      width = width || 1
+      height = height || 1
+      color = color || {}
+      const size = width * height
+      const data = new Uint8Array( 3 * size )
+      const r = ((color.r || 0) * 0xFF) << 0
+      const g = ((color.g || 0) * 0xFF) << 0
+      const b = ((color.b || 0) * 0xFF) << 0
+      for ( var i = 0; i < size; i ++ ) {
+      	var stride = i * 3;
+      	data[ stride ] = r;
+      	data[ stride + 1 ] = g;
+      	data[ stride + 2 ] = b;
+      }
+      var texture = new THREE.DataTexture( data, width, height, THREE.RGBFormat );
+      texture.needsUpdate = true
+      return texture
+    }
+
+    const BLANK_TEXTURE = makeEmptyTexture()
+
+    function ShaderPass(width, height) {
+      this.width = width
+      this.height = height
+      this.scene = new THREE.Scene()
+      this.camera = new THREE.OrthographicCamera(-1, 1, 1 , -1, 1, 100)
+      this.camera.position.z = 10
+      this.buffer = new THREE.WebGLRenderTarget(
+        this.width, this.height,
+        { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter}
+      )
+      this.uniforms = makeUniforms()
+      this.uniforms.texture.value = BLANK_TEXTURE
+      this.material = new THREE.ShaderMaterial({
+				uniforms: this.uniforms,
+				vertexShader: document.getElementById( 'vertexShader' ).textContent,
+				fragmentShader: document.getElementById( 'fragmentShader' ).textContent
+			});
+      this.geometry = new THREE.PlaneBufferGeometry(2, 2, 1, 1)
+			this.mesh = new THREE.Mesh(this.geometry, this.material)
+      this.scene.add(this.mesh)
+    }
+    ShaderPass.prototype.contructor = ShaderPass
+    ShaderPass.prototype.resize = function(width, height) {
+      this.width = width
+      this.height = height
+      this.camera.left = -1
+      this.camera.right = 1
+      this.camera.top = 1
+      this.camera.bottom = -1
+      this.camera.updateProjectionMatrix()
+      this.buffer.setSize(this.width, this.height)
+      console.log(this)
+    }
+    ShaderPass.prototype.render = function(renderer, clock) {
+			this.uniforms.time.value = clock.elapsedTime
+      renderer.render(this.scene, this.camera, this.buffer)
+    }
+
+    function Composer(width, height) {
+      this.width = width
+      this.height = height
+      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+      this.renderer.setClearColor( 0x000000, 1. )
+      this.renderer.setSize(this.width, this.height)
+      this.renderer.setPixelRatio(window.devicePixelRatio)
+      this.clock = new THREE.Clock()
+
+      this.scene = new THREE.Scene()
+      this.camera = new THREE.OrthographicCamera(-1, 1, 1 , -1, 1, 100)
+      this.camera.position.z = 10
+
+      this.shaderPass = new ShaderPass(width, height)
+      this.shaderPass.uniforms.texture = this.shaderPass.buffer.texture
+
+      this.material = new THREE.MeshBasicMaterial({
+        map: this.shaderPass.buffer.texture,
+        side: THREE.DoubleSide
+
+      }),
+      this.geometry = new THREE.PlaneBufferGeometry(2, 2, 1, 1)
+  		this.mesh = new THREE.Mesh(this.geometry, this.material)
+      this.scene.add(this.mesh)
+      console.log(this)
+    }
+    Composer.prototype.contructor = Composer
+    Composer.prototype.resize = function(width, height) {
+      this.width = width
+      this.height = height
+      this.camera.left = -1
+      this.camera.right = 1
+      this.camera.top = 1
+      this.camera.bottom = -1
+      this.camera.updateProjectionMatrix()
+      this.renderer.setSize(this.width, this.height)
+      this.shaderPass.resize(this.width, this.height)
+    }
+    Composer.prototype.render = function() {
+      this.clock.getDelta()
+      this.shaderPass.render(this.renderer, this.clock)
+      this.renderer.render(this.scene, this.camera)
+    }
+
+
+    let composer = new Composer(window.innerWidth, window.innerHeight)
+    document.querySelector(".display").appendChild(composer.renderer.domElement)
+
+    function resize() {
+      composer.resize(window.innerWidth, window.innerHeight)
+    }
+    window.addEventListener("resize", resize)
+
+    function loop() {
+      requestAnimationFrame(() => {
+        composer.render()
+        loop()
+      })
+    }
+    loop()
+    resize()
+  </script>
+</body>
+</html>

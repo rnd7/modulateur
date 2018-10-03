@@ -1,0 +1,47 @@
+* {
+  padding: 0;
+  margin: 0;
+  font-family: sans-serif;
+}
+html, body{
+  height: 100%;
+  width: 100%;
+}
+body{
+  background-color: #000000;
+  color: #FFFFFF;
+  overflow: hidden;
+}
+h1 {
+  font-size: 1em;
+}
+#controls {
+  position: absolute;
+  font-size: .8em;
+  padding: 6px;
+  background-color: #123;
+  bottom: 6px;
+  right: 6px;
+}
+#controls > * {
+  margin-bottom: 3px;
+}
+
+#controls > *:last-child {
+  margin-bottom: 0px;
+}
+button {
+  padding: 2px;
+}
+
+input[type=checkbox], input[type=radio] {
+  vertical-align: middle;
+  position: relative;
+  bottom: 1px;
+}
+input[type=radio] {
+    bottom: 2px;
+}
+#display {
+  position: absolute;
+}
