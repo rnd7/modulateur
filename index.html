@@ -3,86 +3,264 @@
 <head>
   <title>Modulateur</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/97/three.min.js" crossorigin="anonymous"></script>
+  <!--script src="three.min.js"></script-->
+
   <link rel="stylesheet" type="text/css" href="main.css">
 </head>
 <body>
   <div class="display"></div>
-  <script id="vertexShader" type="x-shader/x-vertex">
-    varying vec2 vUv;
-    void main() {
-      vUv = uv;
-      vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-      gl_Position = projectionMatrix * mvPosition;
+
+  <script id="fslib-const" type="x-shader/x-fragment">
+      #define PI 3.1415926535897932384626433832795
+      #define COLOR_STEP 0.00392156862745098039
+  </script>
+
+  <script id="fslib-hsv" type="x-shader/x-fragment">
+      // http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
+      vec3 rgb2hsv(vec3 c)
+      {
+        vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+        vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+        vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+
+        float d = q.x - min(q.w, q.y);
+        float e = 1.0e-10;
+        return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+      }
+      // http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
+      vec3 hsv2rgb(vec3 c)
+      {
+          vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+          vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+          return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+      }
+  </script>
+  <script id="fslib-math">
+    float modI(float a,float b) {
+        float m=a-floor((a+0.5)/b)*b;
+        return floor(m+0.5);
+    }
+    float clampDist(float val, float minVal, float maxVal) {
+      float nval = val - minVal;
+      float rng = maxVal - minVal;
+      float quot = pow(nval/rng, 2.);
+      return clamp(quot*2.-1., -1., 1.);
     }
   </script>
-  <script id="fragmentShader" type="x-shader/x-fragment">
+  <script id="fsbp-uniform" type="x-shader/x-fragment">
 			uniform float time;
       uniform vec2 resolution;
-      uniform sampler2D texture;
+      uniform sampler2D source;
+      uniform float outMix;
 			varying vec2 vUv;
+  </script>
+  <script id="fs-cyclechannel" type="x-shader/x-fragment">
+      #import const;
+      #import math;
+			void main( void )
+      {
+				vec2 position = vUv;
+        vec2 center = vec2(position.x*2.-1., position.y*2.-1.);
+        vec4 color = texture2D(source, position);
+        vec3 val = vec3(
+          clampDist(color.r, COLOR_STEP, 1.),
+          clampDist(color.g, COLOR_STEP, 1.),
+          clampDist(color.b, COLOR_STEP, 1.)
+        );
+				gl_FragColor = vec4(mix(color.rgb + val * COLOR_STEP , color.rgb, .7), 1.0);
+			}
+  </script>
+  <script id="fs-cyclehue" type="x-shader/x-fragment">
+      #import hsv;
+      #import const;
+			void main( void )
+      {
+				vec2 position = vUv;
+        vec4 color = texture2D(source, position);
+        vec3 hsv = rgb2hsv(color.rgb);
+        hsv.r = mod((hsv.r + COLOR_STEP*1.) , 1.);
+        if (hsv.g < COLOR_STEP*128.) {
+          hsv.g += COLOR_STEP;
+        }
+        hsv.g = clamp(hsv.g, COLOR_STEP, 1.);
+        hsv.b = clamp(hsv.b, COLOR_STEP, 1.);
+				gl_FragColor = vec4(mix(hsv2rgb(hsv), color.rgb, .0), 1.0);
+			}
+  </script>
+  <script id="fs-waves" type="x-shader/x-fragment">
+      #import const;
 			void main( void ) {
 				vec2 position = vUv;
         vec2 center = vec2(position.x*2.-1., position.y*2.-1.);
-        vec4 textureColor = texture2D(texture, position);
-				float color = 0.0;
-				color += sin( center.x * cos( time / 17.0 ) * 177.0 ) + cos( center.y * cos( time / 17.3 ) * 1.0 );
-				color += cos( center.y * sin( time / 19.0 ) * 53.0 ) + cos( center.x * sin( time / 2.1 ) * 3.0 );
-				color += sin( center.x * cos( time / 3.7 ) * 113.0 ) + sin( center.y * sin( time / 117.0 ) * 7.0 );
-				color *= cos( time / 11.4 ) * 0.5;
-        float brightness = cos( color + time / 2.0 )/6.;
-				gl_FragColor =  vec4((textureColor.rgb + vec3(brightness, brightness, sin( color + time / 3.0 )))/2.0, 1.0 );
+        vec4 color = texture2D(source, position);
+				float add = 0.0;
+				add += sin( center.x * cos( time / 17. ) * 12. ) * sin( center.y * cos( time / 17. ) * 12. ) ;
+				add -= sin( center.x * sin( time / 3. ) * 3. ) * sin( center.y * sin( time / 3. ) * 3. ) ;
+				add *= cos( center.x * sin( time / 13. ) * 6. ) * cos( center.y * sin( time / 13. ) * 6. ) ;
+				add *= cos( center.x * sin( time / 19. ) * 24. ) + cos( center.y * sin( time / 19. ) * 24. ) ;
+				add *= sin( center.x * cos( time / 43. ) * 1. ) + sin( center.y * cos( time / 43. ) * 1. ) ;
+        vec3 value = clamp(color.rgb + add, COLOR_STEP, 1.);
+				gl_FragColor = vec4(mix(value, color.rgb, .95), 1. );
 
 			}
   </script>
-
-  <script>
-    function makeUniforms() {
-      return {
-        "time": { value: 1.0 },
-        "resolution": { type: "v2", value: new THREE.Vector2() },
-        "texture": { type:'t', value: null },
-      }
+  <script id="fs-blur" type="x-shader/x-fragment">
+    #import const;
+    void main( void ) {
+      vec2 position = vUv;
+      vec4 color = texture2D(source, position);
+      vec4 smoothed = vec4(0.0);
+      smoothed += texture2D(source, position) * 0.2;
+      smoothed += texture2D(source, position + vec2(-1./resolution.x,-1./resolution.y)) * 0.2;
+      smoothed += texture2D(source, position + vec2(1./resolution.x,1./resolution.y)) * 0.2;
+      smoothed += texture2D(source, position + vec2(1./resolution.x,-1./resolution.y)) * 0.2;
+      smoothed += texture2D(source, position + vec2(-1./resolution.x,1./resolution.y)) * 0.2;
+      gl_FragColor = vec4(mix(smoothed.rgb, color.rgb, .9), 1. );
     }
+  </script>
+  <script>
 
     function makeEmptyTexture(width, height, color) {
       width = width || 1
       height = height || 1
       color = color || {}
       const size = width * height
-      const data = new Uint8Array( 3 * size )
+      const data = new Uint8Array(3 * size)
       const r = ((color.r || 0) * 0xFF) << 0
       const g = ((color.g || 0) * 0xFF) << 0
       const b = ((color.b || 0) * 0xFF) << 0
       for ( var i = 0; i < size; i ++ ) {
       	var stride = i * 3;
-      	data[ stride ] = r;
-      	data[ stride + 1 ] = g;
-      	data[ stride + 2 ] = b;
+      	data[stride] = r;
+      	data[stride + 1] = g;
+      	data[stride + 2] = b;
       }
       var texture = new THREE.DataTexture( data, width, height, THREE.RGBFormat );
       texture.needsUpdate = true
       return texture
     }
 
-    const BLANK_TEXTURE = makeEmptyTexture()
+    function precompileShader(name) {
+      let shaderSrc = document.querySelector('#fsbp-uniform').textContent
+      shaderSrc += document.querySelector('#fs-'+name).textContent
+      let i = 10 // import limit
+      let imported = {}
+      while(--i>0) {
+        const match = shaderSrc.match(/#import\s*([^\s;]+)/)
+        if (match && match.length == 2) {
+          let replacement = "";
+          if (!imported[match[1]]) {
+            replacement = document.querySelector('#fslib-'+match[1]).textContent
+            imported[match[1]] = true
+          }
+          shaderSrc = shaderSrc.replace(/#import\s*[^\s]+;/, replacement)
+        } else {
+          break;
+        }
+      }
+      return shaderSrc
+    }
 
-    function ShaderPass(width, height) {
-      this.width = width
-      this.height = height
+    function makeUniforms(shader) {
+      const rx = /uniform\s+([^\s;]+)\s+([^\s;]+)(\s*\[\s*([0-9]+)\s*\])?\s*;/g
+      const uniforms = {}
+      let match
+      do {
+        match = rx.exec(shader)
+        if (match) {
+          let len = match[4]?parseInt(match[4]):0
+          const ref = uniforms[match[2]] = {}
+          if (len) ref.value = []
+          switch (match[1]) {
+            case "int":
+              ref.type = len?"iv1":"i"
+              if (len) while (ref.value.length<len) ref.value.push(0)
+              else ref.value = 0
+              break
+            case "float":
+              ref.type = len?"fv1":"f"
+              if (len) while (ref.value.length<len) ref.value.push(0.)
+              else ref.value = 0.
+              break
+            case "vec2":
+              ref.type = len?"v2v":"v2"
+              if (len) while (ref.value.length<len) ref.value.push(new THREE.Vector2(0., 0.))
+              else ref.value = new THREE.Vector2(0,0)
+              break
+            case "vec3":
+              ref.type = len?"v3v":"v3"
+              if (len) while (ref.value.length<len) ref.value.push(new THREE.Vector3(0., 0., 0.))
+              else ref.value = new THREE.Vector3(0., 0., 0.)
+              break
+            case "vec4":
+              ref.type = len?"v4v":"v4"
+              if (len) while (ref.value.length<len) ref.value.push(new THREE.Vector4(0., 0., 0., 0.))
+              else ref.value = new THREE.Vector4(0., 0., 0., 0.)
+              break
+            case "mat4":
+              ref.type = len?"m4v":"m4"
+              if (len) while (ref.value.length<len) ref.value.push(new THREE.Matrix4())
+              else ref.value = new THREE.Matrix4()
+              break
+            case "sampler2D":
+              ref.type = len?"tv":"t"
+              if (len) while (ref.value.length<len) ref.value.push(BLANK_TEXTURE)
+              else ref.value = BLANK_TEXTURE
+              break
+            default:
+              console.warn("unsupported uniform", match[0])
+          }
+        }
+      } while (match)
+      return uniforms
+    }
+
+    const BLANK_TEXTURE = makeEmptyTexture()
+    const DEFAULT_VERTEX_SHADER = [
+      'varying vec2 vUv;',
+      'void main() {',
+        'vUv = uv;',
+        'vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );',
+        'gl_Position = projectionMatrix * mvPosition;',
+      '}',
+    ].join("")
+
+    const DEFAULT_FRAGMENT_SHADER = [
+      'varying vec2 vUv;',
+      'uniform sampler2D source;',
+      'void main() {',
+				'gl_FragColor = texture2D(source, vUv);',
+      '}',
+    ].join("")
+
+    const SHADER_PASS_DEFAULTS = {
+      width: 1,
+      height: 1,
+      fragmentShader: DEFAULT_FRAGMENT_SHADER,
+      vertexShader: DEFAULT_VERTEX_SHADER,
+      offscreen: false,
+    }
+    function ShaderPass(opts) {
+      Object.assign(this, SHADER_PASS_DEFAULTS, opts)
       this.scene = new THREE.Scene()
       this.camera = new THREE.OrthographicCamera(-1, 1, 1 , -1, 1, 100)
-      this.camera.position.z = 10
-      this.buffer = new THREE.WebGLRenderTarget(
-        this.width, this.height,
-        { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter}
-      )
-      this.uniforms = makeUniforms()
-      this.uniforms.texture.value = BLANK_TEXTURE
-      this.material = new THREE.ShaderMaterial({
-				uniforms: this.uniforms,
-				vertexShader: document.getElementById( 'vertexShader' ).textContent,
-				fragmentShader: document.getElementById( 'fragmentShader' ).textContent
-			});
+      this.camera.position.z = 1
+      if (this.offscreen) {
+        this.buffer = new THREE.WebGLRenderTarget(
+          this.width, this.height,
+          { minFilter: THREE.LinearFilter, magFilter: THREE.NearestFilter}
+        )
+      }
+      if (this.fragmentShader && this.vertexShader) {
+        this.uniforms = Object.assign({}, makeUniforms(this.vertexShader), makeUniforms(this.fragmentShader))
+        this.material = new THREE.ShaderMaterial({
+  				uniforms: this.uniforms,
+  				vertexShader: this.vertexShader,
+  				fragmentShader: this.fragmentShader
+  			})
+      } else {
+        throw new Error("fragment and vertex shader mandatory")
+      }
       this.geometry = new THREE.PlaneBufferGeometry(2, 2, 1, 1)
 			this.mesh = new THREE.Mesh(this.geometry, this.material)
       this.scene.add(this.mesh)
@@ -96,13 +274,15 @@
       this.camera.top = 1
       this.camera.bottom = -1
       this.camera.updateProjectionMatrix()
-      this.buffer.setSize(this.width, this.height)
-      console.log(this)
+      if (this.offscreen) {
+        this.buffer.setSize(this.width, this.height)
+      }
     }
-    ShaderPass.prototype.render = function(renderer, clock) {
-			this.uniforms.time.value = clock.elapsedTime
-      renderer.render(this.scene, this.camera, this.buffer)
+    ShaderPass.prototype.render = function(renderer) {
+      if (this.offscreen) renderer.render(this.scene, this.camera, this.buffer)
+      else renderer.render(this.scene, this.camera)
     }
+
 
     function Composer(width, height) {
       this.width = width
@@ -113,39 +293,71 @@
       this.renderer.setPixelRatio(window.devicePixelRatio)
       this.clock = new THREE.Clock()
 
-      this.scene = new THREE.Scene()
-      this.camera = new THREE.OrthographicCamera(-1, 1, 1 , -1, 1, 100)
-      this.camera.position.z = 10
+      this.shaderPass0 = new ShaderPass({
+        width,
+        height,
+        fragmentShader: precompileShader('cyclechannel'),
+        offscreen: true
+      })
+      this.shaderPass1 = new ShaderPass({
+        width,
+        height,
+        fragmentShader: precompileShader('waves'),
+        offscreen: true
+      })
 
-      this.shaderPass = new ShaderPass(width, height)
-      this.shaderPass.uniforms.texture = this.shaderPass.buffer.texture
+      this.shaderPass2 = new ShaderPass({
+        width,
+        height,
+        fragmentShader: precompileShader('cyclehue'),
+        offscreen: true
+      })
 
-      this.material = new THREE.MeshBasicMaterial({
-        map: this.shaderPass.buffer.texture,
-        side: THREE.DoubleSide
+      this.shaderPass3 = new ShaderPass({
+        width,
+        height,
+        fragmentShader: precompileShader('blur'),
+        offscreen: true
+      })
 
-      }),
-      this.geometry = new THREE.PlaneBufferGeometry(2, 2, 1, 1)
-  		this.mesh = new THREE.Mesh(this.geometry, this.material)
-      this.scene.add(this.mesh)
+      this.bufferPass = new ShaderPass({offscreen: true})
+      this.renderPass = new ShaderPass()
+
+      this.shaderPass0.uniforms.source.value = this.bufferPass.buffer.texture
+      this.shaderPass1.uniforms.source.value = this.shaderPass0.buffer.texture
+      this.shaderPass2.uniforms.source.value = this.shaderPass1.buffer.texture
+      this.shaderPass3.uniforms.source.value = this.shaderPass2.buffer.texture
+      this.bufferPass.uniforms.source.value = this.shaderPass3.buffer.texture
+      this.renderPass.uniforms.source.value = this.bufferPass.buffer.texture
+
       console.log(this)
     }
     Composer.prototype.contructor = Composer
     Composer.prototype.resize = function(width, height) {
       this.width = width
       this.height = height
-      this.camera.left = -1
-      this.camera.right = 1
-      this.camera.top = 1
-      this.camera.bottom = -1
-      this.camera.updateProjectionMatrix()
       this.renderer.setSize(this.width, this.height)
-      this.shaderPass.resize(this.width, this.height)
+      this.bufferPass.resize(this.width, this.height)
+      this.shaderPass0.resize(this.width, this.height)
+      this.shaderPass1.resize(this.width, this.height)
+      this.shaderPass2.resize(this.width, this.height)
+      this.shaderPass3.resize(this.width, this.height)
     }
     Composer.prototype.render = function() {
       this.clock.getDelta()
-      this.shaderPass.render(this.renderer, this.clock)
-      this.renderer.render(this.scene, this.camera)
+
+      this.shaderPass0.uniforms.time.value = this.clock.elapsedTime
+      this.shaderPass1.uniforms.time.value = this.clock.elapsedTime
+      this.shaderPass2.uniforms.time.value = this.clock.elapsedTime
+      this.shaderPass3.uniforms.resolution.value.x = this.width
+      this.shaderPass3.uniforms.resolution.value.y = this.height
+
+      this.shaderPass0.render(this.renderer)
+      this.shaderPass1.render(this.renderer)
+      this.shaderPass2.render(this.renderer)
+      this.shaderPass3.render(this.renderer)
+      this.bufferPass.render(this.renderer)
+      this.renderPass.render(this.renderer)
     }
 
 
