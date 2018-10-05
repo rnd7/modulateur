@@ -35,7 +35,7 @@
           return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
       }
   </script>
-  <script id="fslib-math">
+  <script id="fslib-math" type="x-shader/x-fragment">
     float modI(float a,float b) {
         float m=a-floor((a+0.5)/b)*b;
         return floor(m+0.5);
