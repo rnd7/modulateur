@@ -355,7 +355,7 @@
     }
     Composer.prototype.updateDynamicPassUniforms = function(pass) {
       for (var key in pass.uniforms) {
-        if(key === "time" && pass.uniforms[key].type === "i") {
+        if(key === "time" && pass.uniforms[key].type === "f") {
           pass.uniforms[key].value = this.clock.elapsedTime
         }
       }
