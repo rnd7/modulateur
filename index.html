@@ -293,42 +293,46 @@
       this.renderer.setPixelRatio(window.devicePixelRatio)
       this.clock = new THREE.Clock()
 
-      this.shaderPass0 = new ShaderPass({
-        width,
-        height,
-        fragmentShader: precompileShader('cyclechannel'),
-        offscreen: true
-      })
-      this.shaderPass1 = new ShaderPass({
-        width,
-        height,
-        fragmentShader: precompileShader('waves'),
-        offscreen: true
-      })
-
-      this.shaderPass2 = new ShaderPass({
-        width,
-        height,
-        fragmentShader: precompileShader('cyclehue'),
-        offscreen: true
-      })
-
-      this.shaderPass3 = new ShaderPass({
-        width,
-        height,
-        fragmentShader: precompileShader('blur'),
-        offscreen: true
-      })
-
       this.bufferPass = new ShaderPass({offscreen: true})
       this.renderPass = new ShaderPass()
 
-      this.shaderPass0.uniforms.source.value = this.bufferPass.buffer.texture
-      this.shaderPass1.uniforms.source.value = this.shaderPass0.buffer.texture
-      this.shaderPass2.uniforms.source.value = this.shaderPass1.buffer.texture
-      this.shaderPass3.uniforms.source.value = this.shaderPass2.buffer.texture
-      this.bufferPass.uniforms.source.value = this.shaderPass3.buffer.texture
-      this.renderPass.uniforms.source.value = this.bufferPass.buffer.texture
+      this.passes = [
+        new ShaderPass({
+          width,
+          height,
+          fragmentShader: precompileShader('cyclechannel'),
+          offscreen: true
+        }),
+        new ShaderPass({
+          width,
+          height,
+          fragmentShader: precompileShader('waves'),
+          offscreen: true
+        }),
+        new ShaderPass({
+          width,
+          height,
+          fragmentShader: precompileShader('cyclehue'),
+          offscreen: true
+        }),
+        new ShaderPass({
+          width,
+          height,
+          fragmentShader: precompileShader('blur'),
+          offscreen: true
+        })
+      ]
+
+      let source = this.bufferPass.buffer.texture
+      this.renderPass.uniforms.source.value = source
+      this.passes.forEach((pass) => {
+        if (pass.uniforms.hasOwnProperty("source")) {
+          pass.uniforms.source.value = source
+        }
+        this.updatePassResolutionUniform(pass)
+        source = pass.buffer.texture
+      })
+      this.bufferPass.uniforms.source.value = source
 
       console.log(this)
     }
@@ -338,24 +342,31 @@
       this.height = height
       this.renderer.setSize(this.width, this.height)
       this.bufferPass.resize(this.width, this.height)
-      this.shaderPass0.resize(this.width, this.height)
-      this.shaderPass1.resize(this.width, this.height)
-      this.shaderPass2.resize(this.width, this.height)
-      this.shaderPass3.resize(this.width, this.height)
+      this.passes.forEach((pass) => {
+        pass.resize(this.width, this.height)
+        this.updatePassResolutionUniform(pass)
+      })
     }
+    Composer.prototype.updatePassResolutionUniform = function(pass) {
+      if(pass.uniforms.hasOwnProperty("resolution") && pass.uniforms.resolution.type === "v2") {
+        pass.uniforms.resolution.value.x = this.width
+        pass.uniforms.resolution.value.y = this.height
+      }
+    }
+    Composer.prototype.updateDynamicPassUniforms = function(pass) {
+      for (var key in pass.uniforms) {
+        if(key === "time" && pass.uniforms[key].type === "i") {
+          pass.uniforms[key].value = this.clock.elapsedTime
+        }
+      }
+    }
+
     Composer.prototype.render = function() {
       this.clock.getDelta()
-
-      this.shaderPass0.uniforms.time.value = this.clock.elapsedTime
-      this.shaderPass1.uniforms.time.value = this.clock.elapsedTime
-      this.shaderPass2.uniforms.time.value = this.clock.elapsedTime
-      this.shaderPass3.uniforms.resolution.value.x = this.width
-      this.shaderPass3.uniforms.resolution.value.y = this.height
-
-      this.shaderPass0.render(this.renderer)
-      this.shaderPass1.render(this.renderer)
-      this.shaderPass2.render(this.renderer)
-      this.shaderPass3.render(this.renderer)
+      this.passes.forEach((pass) => {
+        this.updateDynamicPassUniforms(pass)
+        pass.render(this.renderer)
+      })
       this.bufferPass.render(this.renderer)
       this.renderPass.render(this.renderer)
     }
