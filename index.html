@@ -47,7 +47,7 @@
       return clamp(quot*2.-1., -1., 1.);
     }
   </script>
-  <script id="fsbp-uniform" type="x-shader/x-fragment">
+  <script id="fslib-uniforms" type="x-shader/x-fragment">
       uniform float time;
       uniform vec2 resolution;
       uniform sampler2D source;
@@ -55,56 +55,60 @@
       varying vec2 vUv;
   </script>
   <script id="fs-cyclechannel" type="x-shader/x-fragment">
-      #import const;
-      #import math;
-      void main( void )
-      {
-        vec2 position = vUv;
-        vec2 center = vec2(position.x*2.-1., position.y*2.-1.);
-        vec4 color = texture2D(source, position);
-        vec3 val = vec3(
-          clampDist(color.r, COLOR_STEP, 1.),
-          clampDist(color.g, COLOR_STEP, 1.),
-          clampDist(color.b, COLOR_STEP, 1.)
-        );
-        gl_FragColor = vec4(mix(color.rgb + val * COLOR_STEP , color.rgb, .7), 1.0);
-      }
+    #import uniforms;
+    #import const;
+    #import math;
+    void main( void )
+    {
+      vec2 position = vUv;
+      vec2 center = vec2(position.x*2.-1., position.y*2.-1.);
+      vec4 color = texture2D(source, position);
+      vec3 val = vec3(
+        clampDist(color.r, COLOR_STEP, 1.),
+        clampDist(color.g, COLOR_STEP, 1.),
+        clampDist(color.b, COLOR_STEP, 1.)
+      );
+      gl_FragColor = vec4(mix(color.rgb + val * COLOR_STEP , color.rgb, .7), 1.0);
+    }
   </script>
   <script id="fs-cyclehue" type="x-shader/x-fragment">
-      #import hsv;
-      #import const;
-      void main( void )
-      {
-        vec2 position = vUv;
-        vec4 color = texture2D(source, position);
-        vec3 hsv = rgb2hsv(color.rgb);
-        hsv.r = mod((hsv.r + COLOR_STEP*1.) , 1.);
-        if (hsv.g < COLOR_STEP*128.) {
-          hsv.g += COLOR_STEP;
-        }
-        hsv.g = clamp(hsv.g, COLOR_STEP, 1.);
-        hsv.b = clamp(hsv.b, COLOR_STEP, 1.);
-        gl_FragColor = vec4(mix(hsv2rgb(hsv), color.rgb, .0), 1.0);
+    #import uniforms;
+    #import hsv;
+    #import const;
+    void main( void )
+    {
+      vec2 position = vUv;
+      vec4 color = texture2D(source, position);
+      vec3 hsv = rgb2hsv(color.rgb);
+      hsv.r = mod((hsv.r + COLOR_STEP*1.) , 1.);
+      if (hsv.g < COLOR_STEP*128.) {
+        hsv.g += COLOR_STEP;
       }
+      hsv.g = clamp(hsv.g, COLOR_STEP, 1.);
+      hsv.b = clamp(hsv.b, COLOR_STEP, 1.);
+      gl_FragColor = vec4(mix(hsv2rgb(hsv), color.rgb, .0), 1.0);
+    }
   </script>
   <script id="fs-waves" type="x-shader/x-fragment">
-      #import const;
-      void main( void ) {
-        vec2 position = vUv;
-        vec2 center = vec2(position.x*2.-1., position.y*2.-1.);
-        vec4 color = texture2D(source, position);
-        float add = 0.0;
-        add += sin( center.x * cos( time / 17. ) * 12. ) * sin( center.y * cos( time / 17. ) * 12. ) ;
-        add -= sin( center.x * sin( time / 3. ) * 3. ) * sin( center.y * sin( time / 3. ) * 3. ) ;
-        add *= cos( center.x * sin( time / 13. ) * 6. ) * cos( center.y * sin( time / 13. ) * 6. ) ;
-        add *= cos( center.x * sin( time / 19. ) * 24. ) + cos( center.y * sin( time / 19. ) * 24. ) ;
-        add *= sin( center.x * cos( time / 43. ) * 1. ) + sin( center.y * cos( time / 43. ) * 1. ) ;
-        vec3 value = clamp(color.rgb + add, COLOR_STEP, 1.);
-        gl_FragColor = vec4(mix(value, color.rgb, .95), 1. );
+    #import uniforms;
+    #import const;
+    void main( void ) {
+      vec2 position = vUv;
+      vec2 center = vec2(position.x*2.-1., position.y*2.-1.);
+      vec4 color = texture2D(source, position);
+      float add = 0.0;
+      add += sin( center.x * cos( time / 17. ) * resolution.x / 120. ) * sin( center.y * cos( time / 17. ) * resolution.y / 120. ) ;
+      add -= sin( center.x * sin( time / 3. ) * resolution.x / 30. ) * sin( center.y * sin( time / 3. ) * resolution.y /  30. ) ;
+      add *= cos( center.x * sin( time / 13. ) * resolution.x / 60. ) * cos( center.y * sin( time / 13. ) * resolution.y /  60. ) ;
+      add *= cos( center.x * sin( time / 19. ) * resolution.x / 240. ) + cos( center.y * sin( time / 19. ) * resolution.y /  240. ) ;
+      add *= sin( center.x * cos( time / 43. ) * resolution.x / 100. ) + sin( center.y * cos( time / 43. ) * resolution.y /  100. ) ;
+      vec3 value = clamp(color.rgb + add, COLOR_STEP, 1.);
+      gl_FragColor = vec4(mix(value, color.rgb, .95), 1. );
 
-      }
+    }
   </script>
   <script id="fs-blur" type="x-shader/x-fragment">
+    #import uniforms;
     #import const;
     void main( void ) {
       vec2 position = vUv;
@@ -119,7 +123,6 @@
     }
   </script>
   <script>
-
     function makeEmptyTexture(width, height, color) {
       width = width || 1
       height = height || 1
@@ -141,8 +144,7 @@
     }
 
     function precompileShader(name) {
-      let shaderSrc = document.querySelector('#fsbp-uniform').textContent
-      shaderSrc += document.querySelector('#fs-'+name).textContent
+      let shaderSrc = document.querySelector('#fs-'+name).textContent
       let i = 10 // import limit
       let imported = {}
       while(--i>0) {
