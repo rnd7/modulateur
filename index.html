@@ -254,7 +254,11 @@
         )
       }
       if (this.fragmentShader && this.vertexShader) {
-        this.uniforms = Object.assign({}, makeUniforms(this.vertexShader), makeUniforms(this.fragmentShader))
+        this.uniforms = Object.assign(
+          {},
+          makeUniforms(this.vertexShader),
+          makeUniforms(this.fragmentShader)
+        )
         this.material = new THREE.ShaderMaterial({
           uniforms: this.uniforms,
           vertexShader: this.vertexShader,
@@ -298,43 +302,7 @@
       this.bufferPass = new ShaderPass({offscreen: true})
       this.renderPass = new ShaderPass()
 
-      this.passes = [
-        new ShaderPass({
-          width,
-          height,
-          fragmentShader: precompileShader('cyclechannel'),
-          offscreen: true
-        }),
-        new ShaderPass({
-          width,
-          height,
-          fragmentShader: precompileShader('waves'),
-          offscreen: true
-        }),
-        new ShaderPass({
-          width,
-          height,
-          fragmentShader: precompileShader('cyclehue'),
-          offscreen: true
-        }),
-        new ShaderPass({
-          width,
-          height,
-          fragmentShader: precompileShader('blur'),
-          offscreen: true
-        })
-      ]
-
-      let source = this.bufferPass.buffer.texture
-      this.renderPass.uniforms.source.value = source
-      this.passes.forEach((pass) => {
-        if (pass.uniforms.hasOwnProperty("source")) {
-          pass.uniforms.source.value = source
-        }
-        this.updatePassResolutionUniform(pass)
-        source = pass.buffer.texture
-      })
-      this.bufferPass.uniforms.source.value = source
+      this.passes = []
 
       console.log(this)
     }
@@ -355,6 +323,32 @@
         pass.uniforms.resolution.value.y = this.height
       }
     }
+    Composer.prototype.chainPasses = function() {
+      let source = this.bufferPass.buffer.texture
+      this.renderPass.uniforms.source.value = source
+      this.passes.forEach((pass) => {
+        if (pass.uniforms.hasOwnProperty("source")) {
+          pass.uniforms.source.value = source
+        }
+        this.updatePassResolutionUniform(pass)
+        source = pass.buffer.texture
+      })
+      this.bufferPass.uniforms.source.value = source
+    }
+    Composer.prototype.setPasses = function(passes) {
+      passes.forEach((pass) => {
+        this.passes.push(
+          new ShaderPass(
+            Object.assign(
+              {},
+              pass,
+              { width: this.width, height: this.height, offscreen: true }
+            )
+          )
+        )
+      })
+      this.chainPasses()
+    }
     Composer.prototype.updateDynamicPassUniforms = function(pass) {
       for (var key in pass.uniforms) {
         if(key === "time" && pass.uniforms[key].type === "f") {
@@ -362,7 +356,6 @@
         }
       }
     }
-
     Composer.prototype.render = function() {
       this.clock.getDelta()
       this.passes.forEach((pass) => {
@@ -375,6 +368,12 @@
 
 
     let composer = new Composer(window.innerWidth, window.innerHeight)
+    composer.setPasses([
+      { fragmentShader: precompileShader('cyclechannel') },
+      { fragmentShader: precompileShader('waves') },
+      { fragmentShader: precompileShader('cyclehue') },
+      { fragmentShader: precompileShader('blur') }
+    ])
     document.querySelector(".display").appendChild(composer.renderer.domElement)
 
     function resize() {
